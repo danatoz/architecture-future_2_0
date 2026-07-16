@@ -1,0 +1,10 @@
+--- setup minio ---
+>>> Starting MinIO container...
+ Container minio-tfstate Running 
+>>> Waiting for MinIO to be ready...
+>>> MinIO is ready
+>>> Creating 'tfstate' bucket...
+Added `local` successfully.
+Bucket created successfully `local/tfstate`.
+>>> Bucket 'tfstate' ready
+>>> MinIO console: http://localhost:9001 (login: minioadmin / minioadmin)
