@@ -1,0 +1,85 @@
+name: Terraform CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  TF_ROOT: Task2Advanced/environments/dev
+  TF_VERSION: 1.15.7
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: minioadmin
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.TF_ROOT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start MinIO
+        working-directory: Task2Advanced
+        run: docker compose -f docker-compose.yml up -d
+
+      - name: Setup MinIO bucket
+        working-directory: Task2Advanced
+        run: bash setup-minio.sh
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - run: terraform init
+
+      - run: terraform validate
+
+      - run: terraform plan -var-file=terraform.tfvars -out=plan.tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: ${{ env.TF_ROOT }}/plan.tfplan
+
+  apply:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    defaults:
+      run:
+        working-directory: ${{ env.TF_ROOT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start MinIO
+        working-directory: Task2Advanced
+        run: docker compose -f docker-compose.yml up -d
+
+      - name: Setup MinIO bucket
+        working-directory: Task2Advanced
+        run: bash setup-minio.sh
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+
+      - run: terraform init
+
+      - run: terraform apply -auto-approve plan.tfplan
+
+      - name: Verify deployment
+        working-directory: Task2Advanced
+        run: |
+          docker ps --filter name=dev-web --format "{{.Names}} {{.Status}}"
+          curl -s -o /dev/null -w "%{http_code}" http://dev-web:80/ || \
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/

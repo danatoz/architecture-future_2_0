@@ -1,0 +1,82 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 Container Diagram — Целевая архитектура «Будущее 2.0» (3 года)
+
+Person(doctor, "Врач", "Работает с мед. картами, историей болезней, диагностикой")
+Person(patient, "Пациент", "Записывается, оплачивает, получает результаты")
+Person(finop, "Финансовый оператор", "Управляет счетами, кредитами, платежами")
+Person(analyst, "Бизнес-аналитик", "Строит отчёты через витрину данных")
+
+System_Ext(legacy_dwh, "Legacy DWH", "SQL Server 2008 + PowerBuilder")
+System_Ext(legacy_esb, "Legacy ESB", "Apache Camel")
+
+System_Boundary(cloud, "Облачная платформа") {
+
+  System_Boundary(core, "Слой инфраструктуры") {
+    Container(api_gateway, "API Gateway", "Kong / NGINX", "Маршрутизация, аутентификация, rate limiting")
+    Container(event_bus, "Event Bus", "Apache Kafka", "Событийная шина, DLQ, Schema Registry")
+    Container(idp, "Identity Provider", "Keycloak", "SSO, RBAC, управление доступом")
+    Container(monitoring, "Monitoring", "Prometheus + Grafana + ELK", "Мониторинг, логирование, алерты")
+  }
+
+  System_Boundary(domains, "Доменные сервисы") {
+    Container(medical, "Medical Domain", "Go / Java", "Мед. карты, диагностика, запись к врачу")
+    Container(fintech, "Fintech Domain", "Java / Go", "Платежи, кредиты, банковские операции")
+    Container(ai, "AI Domain", "Python", "ИИ-диагностика, анализ изображений, ML-модели")
+    Container(pharma, "Pharma Domain", "Go / Java", "Интеграция фармацевтических компаний")
+    Container(electronics, "Electronics Domain", "Go", "Производство мед. оборудования")
+  }
+
+  System_Boundary(data_platform, "Платформа данных") {
+    Container(data_lake, "Data Lake", "Yandex Object Storage / S3", "Хранение сырых данных")
+    Container(olap, "OLAP Engine", "ClickHouse", "Аналитические запросы, витрины")
+    Container(stream_proc, "Stream Processor", "Apache Flink / Kafka Streams", "Near-real-time обработка")
+    Container(data_catalog, "Data Catalog", "OpenMetadata / DataHub", "Каталог схем, метаданные, Data Product Registry")
+  }
+
+  Container(data_portal, "Data Marketplace Portal", "React + Java Backend", "Витрина данных самообслуживания")
+  Container(acl_dwh, "ACL DWH", "Anti-Corruption Layer", "Адаптер для Legacy DWH")
+  Container(acl_esb, "ACL ESB", "Anti-Corruption Layer", "Адаптер для Legacy ESB")
+}
+
+Rel(doctor, api_gateway, "Взаимодействует через", "HTTPS")
+Rel(patient, api_gateway, "Взаимодействует через", "HTTPS")
+Rel(finop, api_gateway, "Взаимодействует через", "HTTPS")
+Rel(analyst, data_portal, "Строит отчёты", "HTTPS")
+
+Rel(api_gateway, idp, "Проверяет токен", "HTTPS")
+Rel(api_gateway, medical, "Маршрутизирует", "gRPC/HTTPS")
+Rel(api_gateway, fintech, "Маршрутизирует", "gRPC/HTTPS")
+Rel(api_gateway, ai, "Маршрутизирует", "gRPC/HTTPS")
+Rel(api_gateway, pharma, "Маршрутизирует", "gRPC/HTTPS")
+Rel(api_gateway, electronics, "Маршрутизирует", "gRPC/HTTPS")
+
+Rel(medical, event_bus, "Публикует/потребляет события", "Kafka Protocol")
+Rel(fintech, event_bus, "Публикует/потребляет события", "Kafka Protocol")
+Rel(ai, event_bus, "Публикует/потребляет события", "Kafka Protocol")
+Rel(pharma, event_bus, "Публикует/потребляет события", "Kafka Protocol")
+Rel(electronics, event_bus, "Публикует/потребляет события", "Kafka Protocol")
+
+Rel(medical, data_lake, "Отгружает сырые данные", "Kafka S3 Sink")
+Rel(fintech, data_lake, "Отгружает сырые данные", "Kafka S3 Sink")
+Rel(ai, data_lake, "Отгружает сырые данные", "Kafka S3 Sink")
+Rel(pharma, data_lake, "Отгружает сырые данные", "Kafka S3 Sink")
+Rel(electronics, data_lake, "Отгружает сырые данные", "Kafka S3 Sink")
+
+Rel(stream_proc, data_lake, "Читает необработанные данные", "S3 Protocol")
+Rel(stream_proc, olap, "Записывает агрегаты", "ClickHouse Native")
+Rel(data_catalog, olap, "Регистрирует витрины", "REST")
+Rel(data_portal, data_catalog, "Ищет Data Products", "REST")
+Rel(data_portal, olap, "Выполняет аналитические запросы", "REST/JDBC")
+
+Rel(acl_dwh, legacy_dwh, "Читает данные через CDC", "Debezium / JDBC")
+Rel(acl_esb, legacy_esb, "Адаптирует сообщения", "JMS / HTTP")
+Rel(acl_dwh, event_bus, "Публикует события миграции", "Kafka Protocol")
+Rel(acl_esb, event_bus, "Публикует события", "Kafka Protocol")
+
+Rel(monitoring, event_bus, "Собирает метрики", "Prometheus")
+Rel(monitoring, api_gateway, "Собирает метрики", "Prometheus")
+
+@enduml
